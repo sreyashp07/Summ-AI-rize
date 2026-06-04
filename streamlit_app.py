@@ -23,6 +23,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 for key in ["summary", "video_id", "transcript", "chatbot"]:
     if key not in st.session_state:
         st.session_state[key] = None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 with st.sidebar:
     st.markdown("### About")
@@ -45,6 +47,7 @@ if st.button("Generate Summary", type="primary"):
                 st.session_state.video_id = result["video_id"]
                 st.session_state.transcript = result["transcript"]
                 st.session_state.chatbot = None
+                st.session_state.messages = []
             else:
                 st.error(result["message"])
 
@@ -60,4 +63,7 @@ if st.session_state.summary:
             st.image(f"https://img.youtube.com/vi/{st.session_state.video_id}/maxresdefault.jpg")
             st.video(f"https://youtube.com/watch?v={st.session_state.video_id}")
     with tab2:
-        st.write("Chat interface coming next commit.")
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        st.write("(Chat input coming next commit.)")
