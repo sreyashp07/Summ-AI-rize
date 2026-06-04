@@ -21,29 +21,21 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
-# Session state
 for key in ["summary", "video_id", "transcript", "chatbot"]:
     if key not in st.session_state:
         st.session_state[key] = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar
 with st.sidebar:
     st.markdown("### About")
     st.write("Paste a YouTube URL to generate a summary and chat with the video.")
     st.markdown("### If URL fetch fails")
-    st.write("YouTube blocks transcript fetching from some IPs. Use the 'Paste transcript manually' option below as a fallback.")
-    st.markdown("### Requirements")
-    st.write("- Ollama running")
-    st.write("- `ollama pull llama3.2`")
-    st.write("- `ollama pull nomic-embed-text`")
+    st.write("YouTube blocks transcript fetching from many IPs in 2026. Use the manual paste mode as a guaranteed fallback.")
 
-# Header
 st.markdown('<h1 class="app-title">Summ-AI-rize</h1>', unsafe_allow_html=True)
 st.markdown('<p class="app-subtitle">YouTube summarizer and chat assistant powered by Ollama</p>', unsafe_allow_html=True)
 
-# Input mode selection
 mode = st.radio(
     "Input mode",
     ["YouTube URL (auto-fetch transcript)", "Paste transcript manually"],
@@ -57,19 +49,19 @@ manual_video_id = ""
 if mode == "YouTube URL (auto-fetch transcript)":
     youtube_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
 else:
-    st.info("Copy the transcript from YouTube's 'Show transcript' button (three-dot menu under the video), then paste it below.")
-    manual_video_id_input = st.text_input("YouTube URL or Video ID (optional, for thumbnail)", placeholder="https://youtube.com/watch?v=... or just the ID")
-    manual_transcript = st.text_area("Paste transcript here", height=200, placeholder="Paste the full transcript text here...")
+    st.info("Open the video on YouTube → click the three-dot menu under the video → 'Show transcript'. Copy ALL the text on the right panel and paste it below. Timestamps in the pasted text are fine; the AI will ignore them.")
+    manual_video_id_input = st.text_input("YouTube URL or Video ID (optional, for thumbnail)", placeholder="https://youtube.com/watch?v=...")
+    manual_transcript = st.text_area("Paste transcript here", height=250, placeholder="Paste the full transcript text here...")
     if manual_video_id_input:
         manual_video_id = extract_video_id(manual_video_id_input) or manual_video_id_input.strip()
 
 if st.button("Generate Summary", type="primary"):
+    summarizer = YouTubeSummarizer()
     if mode == "YouTube URL (auto-fetch transcript)":
         if not youtube_url:
             st.warning("Please enter a YouTube URL.")
         else:
             with st.spinner("Fetching transcript and generating summary..."):
-                summarizer = YouTubeSummarizer()
                 result = summarizer.summarize_video(youtube_url)
                 if result["status"] == "success":
                     st.session_state.summary = result["summary"]
@@ -79,16 +71,14 @@ if st.button("Generate Summary", type="primary"):
                     st.session_state.messages = []
                 else:
                     st.error(result["message"])
-                    st.info("Tip: Switch to 'Paste transcript manually' mode above if YouTube is blocking the fetch.")
+                    st.info("Switch to 'Paste transcript manually' mode above for a guaranteed working alternative.")
     else:
         if not manual_transcript.strip():
             st.warning("Please paste the transcript text.")
         else:
             with st.spinner("Generating summary from pasted transcript..."):
                 try:
-                    summarizer = YouTubeSummarizer()
-                    texts = summarizer.text_splitter.create_documents([manual_transcript])
-                    summary = summarizer.chain.run(texts)
+                    summary = summarizer.summarize_text(manual_transcript)
                     st.session_state.summary = summary
                     st.session_state.transcript = manual_transcript
                     st.session_state.video_id = manual_video_id if manual_video_id else None
@@ -97,7 +87,6 @@ if st.button("Generate Summary", type="primary"):
                 except Exception as e:
                     st.error(f"Error generating summary: {str(e)}")
 
-# Display results
 if st.session_state.summary:
     tab1, tab2 = st.tabs(["Summary", "Chat with Video"])
 
