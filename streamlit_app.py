@@ -29,6 +29,10 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.markdown("### About")
     st.write("Paste a YouTube URL to generate a summary and chat with the video.")
+    st.markdown("### Requirements")
+    st.write("- Ollama running locally")
+    st.write("- `ollama pull llama3.2`")
+    st.write("- `ollama pull nomic-embed-text`")
 
 st.markdown('<h1 class="app-title">Summ-AI-rize</h1>', unsafe_allow_html=True)
 st.markdown('<p class="app-subtitle">YouTube summarizer and chat assistant powered by Ollama</p>', unsafe_allow_html=True)
@@ -53,6 +57,7 @@ if st.button("Generate Summary", type="primary"):
 
 if st.session_state.summary:
     tab1, tab2 = st.tabs(["Summary", "Chat with Video"])
+
     with tab1:
         col1, col2 = st.columns([2, 1])
         with col1:
@@ -62,8 +67,22 @@ if st.session_state.summary:
         with col2:
             st.image(f"https://img.youtube.com/vi/{st.session_state.video_id}/maxresdefault.jpg")
             st.video(f"https://youtube.com/watch?v={st.session_state.video_id}")
+
     with tab2:
+        if st.session_state.chatbot is None:
+            with st.spinner("Indexing transcript for chat..."):
+                st.session_state.chatbot = VideoChatbot(st.session_state.transcript)
+
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
-        st.write("(Chat input coming next commit.)")
+
+        if prompt := st.chat_input("Ask a question about the video..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    answer = st.session_state.chatbot.ask(prompt)
+                    st.markdown(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
