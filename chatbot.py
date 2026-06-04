@@ -1,42 +1,43 @@
-"""RAG chatbot for chatting with the video transcript."""
+"""RAG chatbot using direct retrieval + LLM call (no legacy chains)."""
 from langchain_community.chat_models import ChatOllama
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
 
 
 class VideoChatbot:
-    """Conversational RAG over a YouTube transcript."""
+    """Conversational RAG with manual retrieval and a sliding history window."""
 
     def __init__(self, transcript: str, model: str = "llama3.2"):
-        self.transcript = transcript
         self.llm = ChatOllama(temperature=0.2, model=model)
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=150,
-        )
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         docs = splitter.create_documents([transcript])
         self.vectorstore = FAISS.from_documents(docs, self.embeddings)
-        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 4})
 
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            output_key="answer",
-        )
-
-        self.chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=self.retriever,
-            memory=self.memory,
-            return_source_documents=False,
-        )
+        self.history = []  # list of (question, answer) tuples
 
     def ask(self, question: str) -> str:
-        """Ask a question; chain handles retrieval + memory."""
-        result = self.chain.invoke({"question": question})
-        return result["answer"]
+        # Retrieve relevant transcript chunks
+        relevant_docs = self.vectorstore.similarity_search(question, k=4)
+        context = "\n\n".join(d.page_content for d in relevant_docs)
+
+        # Build a short history window
+        history_block = ""
+        for q, a in self.history[-3:]:
+            history_block += f"User: {q}\nAssistant: {a}\n\n"
+
+        prompt = (
+            "You are a helpful assistant answering questions about a YouTube video. "
+            "Use the transcript excerpts below to answer. If the answer is not in the "
+            "excerpts, say so clearly.\n\n"
+            f"Transcript excerpts:\n{context}\n\n"
+            f"{('Previous conversation:' + chr(10) + history_block) if history_block else ''}"
+            f"Current question: {question}\n\nAnswer:"
+        )
+
+        response = self.llm.invoke(prompt)
+        answer = response.content if hasattr(response, "content") else str(response)
+        self.history.append((question, answer))
+        return answer
