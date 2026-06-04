@@ -18,57 +18,65 @@ def extract_video_id(youtube_url: str) -> Optional[str]:
     return None
 
 
+def _extract_text(fetched) -> str:
+    """Convert any transcript return type into a single text string."""
+    parts = []
+    for item in fetched:
+        if hasattr(item, "text"):
+            parts.append(item.text)
+        elif isinstance(item, dict) and "text" in item:
+            parts.append(item["text"])
+    return " ".join(parts).strip()
+
+
 def get_transcript(video_id: str, max_retries: int = 3) -> str:
     """
-    Fetch transcript using youtube-transcript-api v1.x with retries
-    and language fallbacks. Handles YouTube's new PO-token blocking
-    gracefully by retrying and trying multiple language codes.
+    Fetch transcript using multiple API strategies for compatibility
+    across youtube-transcript-api versions, with retries.
     """
     languages = ["en", "en-US", "en-GB", "hi", "es"]
     last_error = None
 
     for attempt in range(max_retries):
+        # Strategy 1: New v1.x instance .fetch() method
         try:
             api = YouTubeTranscriptApi()
-            fetched = api.fetch(video_id, languages=languages)
-
-            # v1.x returns an iterable of snippet objects with .text attribute
-            text_parts = []
-            for snippet in fetched:
-                if hasattr(snippet, "text"):
-                    text_parts.append(snippet.text)
-                elif isinstance(snippet, dict):
-                    text_parts.append(snippet.get("text", ""))
-
-            full_text = " ".join(text_parts).strip()
-            if not full_text:
-                raise Exception("Empty transcript returned from YouTube")
-            return full_text
-
+            if hasattr(api, "fetch"):
+                fetched = api.fetch(video_id, languages=languages)
+                text = _extract_text(fetched)
+                if text:
+                    return text
         except Exception as e:
             last_error = e
-            error_msg = str(e).lower()
 
-            # Permanent failures - don't retry
-            if any(x in error_msg for x in [
-                "transcripts disabled",
-                "no transcript",
-                "video unavailable",
-                "not available",
-                "no captions",
-            ]):
-                raise Exception(
-                    f"This video has no available captions. ({str(e)})"
-                )
+        # Strategy 2: Old static get_transcript() method
+        try:
+            if hasattr(YouTubeTranscriptApi, "get_transcript"):
+                fetched = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+                text = _extract_text(fetched)
+                if text:
+                    return text
+        except Exception as e:
+            last_error = e
 
-            # Retry on transient/blocking errors
-            if attempt < max_retries - 1:
-                time.sleep(1.5 * (attempt + 1))
-                continue
+        # Strategy 3: list_transcripts + find_transcript + fetch
+        try:
+            if hasattr(YouTubeTranscriptApi, "list_transcripts"):
+                ts_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                ts = ts_list.find_transcript(languages)
+                fetched = ts.fetch()
+                text = _extract_text(fetched)
+                if text:
+                    return text
+        except Exception as e:
+            last_error = e
+
+        if attempt < max_retries - 1:
+            time.sleep(1.5 * (attempt + 1))
 
     raise Exception(
-        f"Could not fetch transcript after {max_retries} attempts. "
-        f"YouTube is likely blocking requests from your IP (PO-token issue). "
-        f"Use the 'Paste transcript manually' option below, or try a different video. "
+        f"Could not fetch transcript. YouTube is likely blocking your IP "
+        f"(PO-token issue affecting most users in 2026). "
+        f"Use 'Paste transcript manually' mode instead. "
         f"Last error: {str(last_error)}"
     )
