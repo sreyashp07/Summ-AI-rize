@@ -131,6 +131,13 @@ if st.session_state.summary:
             unsafe_allow_html=True
         )
 
+        st.download_button(
+        label="Download Summary (Markdown)",
+        data=st.session_state.summary,
+        file_name=f"summary_{st.session_state.video_id or 'manual'}.md",
+        mime="text/markdown",
+    )
+
     tab1, tab2 = st.tabs(["Summary", "Chat with Video"])
     with tab1:
         if st.session_state.video_id:
