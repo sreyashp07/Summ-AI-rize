@@ -43,6 +43,12 @@ with st.sidebar:
     }[depth])
 
     st.markdown("---")
+    if st.button("Clear Session", use_container_width=True):
+        for k in ["summary", "video_id", "transcript", "chatbot", "stats", "messages"]:
+            st.session_state.pop(k, None)
+        st.session_state.messages = []
+        st.rerun()
+
     st.markdown("### About")
     st.write("Local YouTube summarizer with content-aware prompts for math, tutorial, and general content.")
 
