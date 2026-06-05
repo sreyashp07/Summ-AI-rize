@@ -167,6 +167,31 @@ if st.session_state.summary:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
+        # Quick action buttons
+        if not st.session_state.messages:
+            st.markdown("**Try these:**")
+            qa_col1, qa_col2, qa_col3 = st.columns(3)
+            quick_prompt = None
+            with qa_col1:
+                if st.button("Explain the main idea", use_container_width=True):
+                    quick_prompt = "Explain the main idea of this video in simple terms."
+            with qa_col2:
+                if st.button("List key takeaways", use_container_width=True):
+                    quick_prompt = "List the top 5 takeaways from this video as bullet points."
+            with qa_col3:
+                if st.button("Give an example", use_container_width=True):
+                    quick_prompt = "Give a concrete example of one of the main concepts mentioned."
+
+            if quick_prompt:
+                st.session_state.messages.append({"role": "user", "content": quick_prompt})
+                with st.chat_message("user"):
+                    st.markdown(quick_prompt)
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking..."):
+                        answer = st.session_state.chatbot.ask(quick_prompt)
+                        st.markdown(answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+
         if prompt := st.chat_input("Ask a question about the video..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
