@@ -19,6 +19,12 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .summary-card { background-color: rgba(132, 204, 22, 0.05); border-left: 4px solid #84cc16; border-radius: 8px; padding: 20px; margin: 20px 0; animation: fadeIn 0.6s ease-in; }
 .stat-pill { display: inline-block; background: rgba(132, 204, 22, 0.15); color: #d4ff00; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-right: 8px; font-family: 'JetBrains Mono', monospace; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(132, 204, 22, 0.4); } 50% { box-shadow: 0 0 0 8px rgba(132, 204, 22, 0); } }
+.stat-pill:hover { animation: pulse 1.2s ease-out; cursor: default; }
+[data-testid="stTabs"] button[aria-selected="true"] { color: #d4ff00 !important; border-bottom-color: #d4ff00 !important; }
+[data-testid="stChatMessage"] { animation: fadeIn 0.4s ease-out; }
+.stMarkdown h2 { color: #d4ff00; border-bottom: 1px solid rgba(132, 204, 22, 0.2); padding-bottom: 6px; margin-top: 24px; }
+.stMarkdown h1 { color: #d4ff00; }
 </style>
 """, unsafe_allow_html=True)
 
