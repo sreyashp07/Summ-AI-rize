@@ -17,14 +17,20 @@ class VideoChatbot:
         self.llm = ChatOllama(temperature=0.2, model=model)
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        # Smaller chunks with sentence-aware separators for precise retrieval
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=600,
+            chunk_overlap=120,
+            separators=[". ", "? ", "! ", "\n\n", "\n", " ", ""],
+            length_function=len,
+        )
         docs = splitter.create_documents([transcript])
         logger.info(f"Building FAISS index over {len(docs)} chunks")
         self.vectorstore = FAISS.from_documents(docs, self.embeddings)
 
         self.history = []
         elapsed = round(time.time() - start, 2)
-        logger.info(f"Chatbot ready in {elapsed}s with {len(docs)} indexed chunks")
+        logger.info(f"Chatbot ready in {elapsed}s with {len(docs)} chunks")
 
     def ask(self, question: str) -> str:
         start = time.time()
