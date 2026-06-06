@@ -1,4 +1,4 @@
-"""YouTube video summarization with content-aware prompting, depth control, TL;DR, and timing."""
+"""YouTube video summarization with content-aware prompting, depth control, TL;DR, keywords, and timing."""
 import time
 import logging
 from langchain_community.chat_models import ChatOllama
@@ -6,6 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from utils import extract_video_id, get_transcript, clean_transcript
 from content_detector import detect_content_type, get_type_label
 from prompts import get_prompts
+from keywords import extract_keywords
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,21 +68,20 @@ class YouTubeSummarizer:
         logger.info(f"Split transcript into {len(chunks)} chunks; depth={self.depth}")
 
         if len(chunks) == 1:
-            logger.info("Single-chunk summarization path")
             summary = self._summarize_chunk(chunks[0], map_prompt)
         else:
-            logger.info(f"Running map-reduce over {len(chunks)} chunks")
             partials = []
             for i, chunk in enumerate(chunks, start=1):
                 logger.info(f"  Summarizing chunk {i}/{len(chunks)}")
                 partials.append(self._summarize_chunk(chunk, map_prompt))
-            logger.info("Combining partial summaries")
             summary = self._combine(partials, combine_prompt)
 
-        logger.info("Generating TL;DR")
         tldr = self._generate_tldr(summary)
         if tldr:
             summary = f"## TL;DR\n\n{tldr}\n\n---\n\n{summary}"
+
+        kws = extract_keywords(transcript, top_n=8)
+        logger.info(f"Extracted keywords: {kws}")
 
         elapsed = round(time.time() - start_time, 2)
         word_count = len(summary.split())
@@ -90,6 +90,7 @@ class YouTubeSummarizer:
         return {
             "summary": summary,
             "tldr": tldr,
+            "keywords": kws,
             "content_type": content_type,
             "type_label": type_label,
             "chunks_processed": len(chunks),
