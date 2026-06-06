@@ -1,4 +1,4 @@
-"""YouTube video summarization with caching, content-aware prompts, depth control, TL;DR, and keywords."""
+"""YouTube video summarization with progress callbacks, caching, content-aware prompts, depth control, TL;DR, and keywords."""
 import time
 import hashlib
 import logging
@@ -24,7 +24,6 @@ TLDR_PROMPT = (
 
 
 class YouTubeSummarizer:
-    # Class-level cache shared across instances within a Python session
     _cache: dict = {}
 
     def __init__(self, model: str = "llama3.2", depth: str = "standard"):
@@ -57,18 +56,18 @@ class YouTubeSummarizer:
             logger.warning(f"TL;DR generation failed: {e}")
             return ""
 
-    def summarize_text(self, transcript: str) -> dict:
+    def summarize_text(self, transcript: str, progress_callback=None) -> dict:
         if not transcript or not transcript.strip():
             raise Exception("Transcript is empty.")
 
         transcript = clean_transcript(transcript)
-
-        # Cache lookup
         cache_key = hashlib.md5(
             f"{transcript[:5000]}|{self.depth}|{self.model_name}".encode()
         ).hexdigest()
         if cache_key in self._cache:
-            logger.info(f"Cache HIT for key {cache_key[:8]}... returning cached")
+            logger.info(f"Cache HIT for key {cache_key[:8]}...")
+            if progress_callback:
+                progress_callback(1, 1, "Loaded from cache")
             return self._cache[cache_key]
 
         logger.info(f"Cache MISS for key {cache_key[:8]}... generating")
@@ -76,21 +75,33 @@ class YouTubeSummarizer:
 
         content_type = detect_content_type(transcript)
         type_label = get_type_label(content_type)
-        logger.info(f"Detected content type: {content_type} ({type_label})")
+        if progress_callback:
+            progress_callback(0, 100, f"Detected: {type_label}")
 
         map_prompt, combine_prompt = get_prompts(content_type, self.depth)
         chunks = self.text_splitter.split_text(transcript)
-        logger.info(f"Split transcript into {len(chunks)} chunks; depth={self.depth}")
+        total = len(chunks)
+        logger.info(f"Split transcript into {total} chunks; depth={self.depth}")
 
-        if len(chunks) == 1:
+        if total == 1:
+            if progress_callback:
+                progress_callback(0, 1, "Summarizing single chunk")
             summary = self._summarize_chunk(chunks[0], map_prompt)
+            if progress_callback:
+                progress_callback(1, 1, "Done")
         else:
             partials = []
             for i, chunk in enumerate(chunks, start=1):
-                logger.info(f"  Summarizing chunk {i}/{len(chunks)}")
+                logger.info(f"  Summarizing chunk {i}/{total}")
+                if progress_callback:
+                    progress_callback(i - 1, total + 1, f"Summarizing chunk {i} of {total}")
                 partials.append(self._summarize_chunk(chunk, map_prompt))
+            if progress_callback:
+                progress_callback(total, total + 1, "Combining summaries")
             summary = self._combine(partials, combine_prompt)
 
+        if progress_callback:
+            progress_callback(total, total + 1, "Generating TL;DR")
         tldr = self._generate_tldr(summary)
         if tldr:
             summary = f"## TL;DR\n\n{tldr}\n\n---\n\n{summary}"
@@ -100,13 +111,16 @@ class YouTubeSummarizer:
         word_count = len(summary.split())
         logger.info(f"Summary complete: {word_count} words in {elapsed}s")
 
+        if progress_callback:
+            progress_callback(total + 1, total + 1, "Done")
+
         result = {
             "summary": summary,
             "tldr": tldr,
             "keywords": kws,
             "content_type": content_type,
             "type_label": type_label,
-            "chunks_processed": len(chunks),
+            "chunks_processed": total,
             "transcript_words": len(transcript.split()),
             "summary_words": word_count,
             "elapsed_seconds": elapsed,
@@ -114,13 +128,15 @@ class YouTubeSummarizer:
         self._cache[cache_key] = result
         return result
 
-    def summarize_video(self, youtube_url: str) -> dict:
+    def summarize_video(self, youtube_url: str, progress_callback=None) -> dict:
         try:
             video_id = extract_video_id(youtube_url)
             if not video_id:
                 return {"status": "error", "message": "Invalid YouTube URL"}
+            if progress_callback:
+                progress_callback(0, 100, "Fetching transcript")
             transcript = get_transcript(video_id)
-            result = self.summarize_text(transcript)
+            result = self.summarize_text(transcript, progress_callback=progress_callback)
             return {
                 "status": "success",
                 "video_id": video_id,

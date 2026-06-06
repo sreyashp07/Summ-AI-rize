@@ -84,12 +84,17 @@ else:
 
 if st.button("Generate Summary", type="primary"):
     summarizer = YouTubeSummarizer(depth=depth)
+    progress_bar = st.progress(0, text="Starting...")
+    def on_progress(done, total, msg):
+        progress_bar.progress(min(done / max(total, 1), 1.0), text=msg)
+
     if mode == "YouTube URL (auto-fetch transcript)":
         if not youtube_url:
+            progress_bar.empty()
             st.warning("Please enter a YouTube URL.")
         else:
             with st.spinner(f"Generating {depth} summary..."):
-                result = summarizer.summarize_video(youtube_url)
+                result = summarizer.summarize_video(youtube_url, progress_callback=on_progress)
                 if result["status"] == "success":
                     st.session_state.summary = result["summary"]
                     st.session_state.video_id = result["video_id"]
@@ -107,13 +112,15 @@ if st.button("Generate Summary", type="primary"):
                 else:
                     st.error(result["message"])
                     st.info("Try the 'Paste transcript manually' mode above instead.")
+            progress_bar.empty()
     else:
         if not manual_transcript.strip():
+            progress_bar.empty()
             st.warning("Please paste the transcript text.")
         else:
             with st.spinner(f"Generating {depth} summary from pasted transcript..."):
                 try:
-                    result = summarizer.summarize_text(manual_transcript)
+                    result = summarizer.summarize_text(manual_transcript, progress_callback=on_progress)
                     st.session_state.summary = result["summary"]
                     st.session_state.transcript = manual_transcript
                     st.session_state.video_id = manual_video_id if manual_video_id else None
@@ -129,6 +136,7 @@ if st.button("Generate Summary", type="primary"):
                     st.session_state.messages = []
                 except Exception as e:
                     st.error(f"Error generating summary: {str(e)}")
+            progress_bar.empty()
 
 if st.session_state.summary:
     if st.session_state.stats:
