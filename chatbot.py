@@ -1,4 +1,4 @@
-"""RAG chatbot using direct retrieval + LLM call with logging."""
+"""RAG chatbot with MMR retrieval and logging."""
 import logging
 import time
 from langchain_community.chat_models import ChatOllama
@@ -10,14 +10,13 @@ logger = logging.getLogger("chatbot")
 
 
 class VideoChatbot:
-    """Conversational RAG with manual retrieval and sliding history."""
+    """Conversational RAG with MMR retrieval and sliding history."""
 
     def __init__(self, transcript: str, model: str = "llama3.2"):
         start = time.time()
         self.llm = ChatOllama(temperature=0.2, model=model)
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
-        # Smaller chunks with sentence-aware separators for precise retrieval
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=600,
             chunk_overlap=120,
@@ -34,9 +33,12 @@ class VideoChatbot:
 
     def ask(self, question: str) -> str:
         start = time.time()
-        relevant_docs = self.vectorstore.similarity_search(question, k=4)
+        # MMR: balances relevance with diversity to avoid near-duplicate chunks
+        relevant_docs = self.vectorstore.max_marginal_relevance_search(
+            question, k=4, fetch_k=20, lambda_mult=0.5
+        )
         context = "\n\n".join(d.page_content for d in relevant_docs)
-        logger.info(f"Retrieved {len(relevant_docs)} chunks for query")
+        logger.info(f"Retrieved {len(relevant_docs)} chunks for query (MMR)")
 
         history_block = ""
         for q, a in self.history[-3:]:
