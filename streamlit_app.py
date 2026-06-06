@@ -57,7 +57,6 @@ with st.sidebar:
 
     st.markdown("### About")
     st.write("Local YouTube summarizer with content-aware prompts for math, tutorial, and general content.")
-
     st.markdown("### If URL fetch fails")
     st.write("YouTube blocks transcript fetching from many IPs. Use manual paste mode as a guaranteed fallback.")
 
@@ -77,7 +76,7 @@ manual_video_id = ""
 if mode == "YouTube URL (auto-fetch transcript)":
     youtube_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
 else:
-    st.info("On YouTube: three-dot menu under the video → 'Show transcript' → select all → copy → paste below.")
+    st.info("On YouTube: three-dot menu under the video, click Show transcript, select all, copy, paste below.")
     manual_video_id_input = st.text_input("YouTube URL (optional, for thumbnail)", placeholder="https://youtube.com/watch?v=...")
     manual_transcript = st.text_area("Paste transcript here", height=250, placeholder="Paste full transcript here...")
     if manual_video_id_input:
@@ -89,7 +88,7 @@ if st.button("Generate Summary", type="primary"):
         if not youtube_url:
             st.warning("Please enter a YouTube URL.")
         else:
-            with st.spinner(f"Generating {depth} summary... (check terminal for live progress)"):
+            with st.spinner(f"Generating {depth} summary..."):
                 result = summarizer.summarize_video(youtube_url)
                 if result["status"] == "success":
                     st.session_state.summary = result["summary"]
@@ -101,6 +100,7 @@ if st.button("Generate Summary", type="primary"):
                         "transcript_words": result["transcript_words"],
                         "summary_words": result["summary_words"],
                         "elapsed_seconds": result["elapsed_seconds"],
+                        "keywords": result.get("keywords", []),
                     }
                     st.session_state.chatbot = None
                     st.session_state.messages = []
@@ -123,6 +123,7 @@ if st.button("Generate Summary", type="primary"):
                         "transcript_words": result["transcript_words"],
                         "summary_words": result["summary_words"],
                         "elapsed_seconds": result["elapsed_seconds"],
+                        "keywords": result.get("keywords", []),
                     }
                     st.session_state.chatbot = None
                     st.session_state.messages = []
@@ -132,18 +133,26 @@ if st.button("Generate Summary", type="primary"):
 if st.session_state.summary:
     if st.session_state.stats:
         s = st.session_state.stats
+        reading_min = max(1, round(s["summary_words"] / 230))
         st.markdown(
             f'<div style="margin: 10px 0;">'
             f'<span class="stat-pill">Type: {s["type_label"]}</span>'
             f'<span class="stat-pill">{s["chunks_processed"]} chunk(s)</span>'
             f'<span class="stat-pill">{s["transcript_words"]} input words</span>'
             f'<span class="stat-pill">{s["summary_words"]} output words</span>'
+            f'<span class="stat-pill">~{reading_min} min read</span>'
             f'<span class="stat-pill">{s["elapsed_seconds"]}s</span>'
             f'</div>',
             unsafe_allow_html=True
         )
+        if s.get("keywords"):
+            kw_html = " ".join(
+                f'<span class="stat-pill" style="background:rgba(74,222,128,0.15);color:#4ade80;">{k}</span>'
+                for k in s["keywords"]
+            )
+            st.markdown(f'<div style="margin: 8px 0 16px 0;"><b>Topics:</b> {kw_html}</div>', unsafe_allow_html=True)
 
-        st.download_button(
+    st.download_button(
         label="Download Summary (Markdown)",
         data=st.session_state.summary,
         file_name=f"summary_{st.session_state.video_id or 'manual'}.md",
@@ -151,6 +160,7 @@ if st.session_state.summary:
     )
 
     tab1, tab2 = st.tabs(["Summary", "Chat with Video"])
+
     with tab1:
         if st.session_state.video_id:
             col1, col2 = st.columns([2, 1])
@@ -173,7 +183,6 @@ if st.session_state.summary:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
-        # Quick action buttons
         if not st.session_state.messages:
             st.markdown("**Try these:**")
             qa_col1, qa_col2, qa_col3 = st.columns(3)
@@ -187,7 +196,6 @@ if st.session_state.summary:
             with qa_col3:
                 if st.button("Give an example", use_container_width=True):
                     quick_prompt = "Give a concrete example of one of the main concepts mentioned."
-
             if quick_prompt:
                 st.session_state.messages.append({"role": "user", "content": quick_prompt})
                 with st.chat_message("user"):
@@ -197,7 +205,6 @@ if st.session_state.summary:
                         answer = st.session_state.chatbot.ask(quick_prompt)
                         st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
-
         if prompt := st.chat_input("Ask a question about the video..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
