@@ -42,6 +42,8 @@ class YouTubeSummarizer:
     def summarize_text(self, transcript: str) -> dict:
         if not transcript or not transcript.strip():
             raise Exception("Transcript is empty.")
+        from utils import clean_transcript
+        transcript = clean_transcript(transcript)
 
         start_time = time.time()
 

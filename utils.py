@@ -1,4 +1,4 @@
-"""Utility functions for URL parsing and transcript fetching."""
+"""Utility functions for URL parsing, transcript fetching, and cleaning."""
 import re
 import time
 from typing import Optional
@@ -29,6 +29,35 @@ def _extract_text(fetched) -> str:
     return " ".join(parts).strip()
 
 
+def clean_transcript(text: str) -> str:
+    """
+    Clean noisy transcript text by removing common artifacts:
+    - Speaker tags like [Music], [Applause], [Laughter]
+    - Pasted timestamps like "0:23" or "1:23:45"
+    - Repeated consecutive words from auto-captions
+    - Excess whitespace
+    """
+    if not text:
+        return text
+
+    # Remove bracketed annotations: [Music], [Applause], [Inaudible], etc.
+    text = re.sub(r'\[[^\]]{1,40}\]', ' ', text)
+
+    # Remove parenthetical annotations: (laughs), (music playing)
+    text = re.sub(r'\((?:music|applause|laughter|laughs|inaudible|cheering|chuckles)[^)]{0,30}\)',
+                  ' ', text, flags=re.IGNORECASE)
+
+    # Remove standalone timestamps on their own line or sandwiched in text
+    text = re.sub(r'\b\d{1,2}:\d{2}(?::\d{2})?\b', ' ', text)
+
+    # Collapse repeated consecutive words: "the the the" -> "the"
+    text = re.sub(r'\b(\w+)(\s+\1\b)+', r'\1', text, flags=re.IGNORECASE)
+
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
 def get_transcript(video_id: str, max_retries: int = 3) -> str:
     """
     Fetch transcript using multiple API strategies for compatibility
@@ -45,7 +74,7 @@ def get_transcript(video_id: str, max_retries: int = 3) -> str:
                 fetched = api.fetch(video_id, languages=languages)
                 text = _extract_text(fetched)
                 if text:
-                    return text
+                    return clean_transcript(text)
         except Exception as e:
             last_error = e
 
@@ -55,7 +84,7 @@ def get_transcript(video_id: str, max_retries: int = 3) -> str:
                 fetched = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
                 text = _extract_text(fetched)
                 if text:
-                    return text
+                    return clean_transcript(text)
         except Exception as e:
             last_error = e
 
@@ -67,7 +96,7 @@ def get_transcript(video_id: str, max_retries: int = 3) -> str:
                 fetched = ts.fetch()
                 text = _extract_text(fetched)
                 if text:
-                    return text
+                    return clean_transcript(text)
         except Exception as e:
             last_error = e
 
