@@ -3,6 +3,7 @@ import streamlit as st
 from summarizer import YouTubeSummarizer
 from chatbot import VideoChatbot
 from utils import extract_video_id
+from examples import get_example_names, get_example_text
 
 st.set_page_config(page_title="Summ-AI-rize", layout="wide", initial_sidebar_state="expanded")
 
@@ -77,8 +78,10 @@ if mode == "YouTube URL (auto-fetch transcript)":
     youtube_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
 else:
     st.info("On YouTube: three-dot menu under the video, click Show transcript, select all, copy, paste below.")
+    example_choice = st.selectbox("Or try an example transcript:", get_example_names())
     manual_video_id_input = st.text_input("YouTube URL (optional, for thumbnail)", placeholder="https://youtube.com/watch?v=...")
-    manual_transcript = st.text_area("Paste transcript here", height=250, placeholder="Paste full transcript here...")
+    default_text = get_example_text(example_choice) if example_choice != "(none)" else ""
+    manual_transcript = st.text_area("Paste transcript here", height=250, value=default_text, placeholder="Paste full transcript here...")
     if manual_video_id_input:
         manual_video_id = extract_video_id(manual_video_id_input) or manual_video_id_input.strip()
 
