@@ -191,6 +191,21 @@ if st.session_state.summary:
         if st.session_state.chatbot is None:
             with st.spinner("Indexing transcript for chat..."):
                 st.session_state.chatbot = VideoChatbot(st.session_state.transcript)
+
+        # Chat export button
+        if st.session_state.messages:
+            chat_md = "# Chat with Video\n\n"
+            for msg in st.session_state.messages:
+                role = "**You**" if msg["role"] == "user" else "**Assistant**"
+                chat_md += f"### {role}\n\n{msg['content']}\n\n---\n\n"
+            st.download_button(
+                label="Export Chat as Markdown",
+                data=chat_md,
+                file_name=f"chat_{st.session_state.video_id or 'manual'}.md",
+                mime="text/markdown",
+                key="export_chat",
+            )
+
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
