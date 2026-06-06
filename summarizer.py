@@ -1,5 +1,6 @@
-"""YouTube video summarization with content-aware prompting, depth control, TL;DR, keywords, and timing."""
+"""YouTube video summarization with caching, content-aware prompts, depth control, TL;DR, and keywords."""
 import time
+import hashlib
 import logging
 from langchain_community.chat_models import ChatOllama
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -23,9 +24,13 @@ TLDR_PROMPT = (
 
 
 class YouTubeSummarizer:
+    # Class-level cache shared across instances within a Python session
+    _cache: dict = {}
+
     def __init__(self, model: str = "llama3.2", depth: str = "standard"):
         self.llm = ChatOllama(temperature=0, model=model)
         self.depth = depth
+        self.model_name = model
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=10000,
             chunk_overlap=1000,
@@ -57,6 +62,16 @@ class YouTubeSummarizer:
             raise Exception("Transcript is empty.")
 
         transcript = clean_transcript(transcript)
+
+        # Cache lookup
+        cache_key = hashlib.md5(
+            f"{transcript[:5000]}|{self.depth}|{self.model_name}".encode()
+        ).hexdigest()
+        if cache_key in self._cache:
+            logger.info(f"Cache HIT for key {cache_key[:8]}... returning cached")
+            return self._cache[cache_key]
+
+        logger.info(f"Cache MISS for key {cache_key[:8]}... generating")
         start_time = time.time()
 
         content_type = detect_content_type(transcript)
@@ -81,13 +96,11 @@ class YouTubeSummarizer:
             summary = f"## TL;DR\n\n{tldr}\n\n---\n\n{summary}"
 
         kws = extract_keywords(transcript, top_n=8)
-        logger.info(f"Extracted keywords: {kws}")
-
         elapsed = round(time.time() - start_time, 2)
         word_count = len(summary.split())
         logger.info(f"Summary complete: {word_count} words in {elapsed}s")
 
-        return {
+        result = {
             "summary": summary,
             "tldr": tldr,
             "keywords": kws,
@@ -98,6 +111,8 @@ class YouTubeSummarizer:
             "summary_words": word_count,
             "elapsed_seconds": elapsed,
         }
+        self._cache[cache_key] = result
+        return result
 
     def summarize_video(self, youtube_url: str) -> dict:
         try:
