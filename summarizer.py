@@ -1,13 +1,12 @@
-"""YouTube video summarization with content-aware prompting, depth control, and timing."""
+"""YouTube video summarization with content-aware prompting, depth control, TL;DR, and timing."""
 import time
 import logging
 from langchain_community.chat_models import ChatOllama
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from utils import extract_video_id, get_transcript
+from utils import extract_video_id, get_transcript, clean_transcript
 from content_detector import detect_content_type, get_type_label
 from prompts import get_prompts
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -15,9 +14,14 @@ logging.basicConfig(
 logger = logging.getLogger("summarizer")
 
 
-class YouTubeSummarizer:
-    """Map-reduce summarization with content awareness, depth control, and timing."""
+TLDR_PROMPT = (
+    "In 2-3 sentences, give a sharp executive summary of the following video summary. "
+    "Be specific, no fluff. Start directly with the content - no 'this video discusses'.\n\n"
+    "Summary:\n{summary}\n\nTL;DR:"
+)
 
+
+class YouTubeSummarizer:
     def __init__(self, model: str = "llama3.2", depth: str = "standard"):
         self.llm = ChatOllama(temperature=0, model=model)
         self.depth = depth
@@ -39,12 +43,19 @@ class YouTubeSummarizer:
         combined = "\n\n".join(summaries)
         return self._invoke(combine_prompt.format(text=combined))
 
+    def _generate_tldr(self, summary: str) -> str:
+        try:
+            tldr = self._invoke(TLDR_PROMPT.format(summary=summary[:3000]))
+            return tldr.strip()
+        except Exception as e:
+            logger.warning(f"TL;DR generation failed: {e}")
+            return ""
+
     def summarize_text(self, transcript: str) -> dict:
         if not transcript or not transcript.strip():
             raise Exception("Transcript is empty.")
-        from utils import clean_transcript
-        transcript = clean_transcript(transcript)
 
+        transcript = clean_transcript(transcript)
         start_time = time.time()
 
         content_type = detect_content_type(transcript)
@@ -67,12 +78,18 @@ class YouTubeSummarizer:
             logger.info("Combining partial summaries")
             summary = self._combine(partials, combine_prompt)
 
+        logger.info("Generating TL;DR")
+        tldr = self._generate_tldr(summary)
+        if tldr:
+            summary = f"## TL;DR\n\n{tldr}\n\n---\n\n{summary}"
+
         elapsed = round(time.time() - start_time, 2)
         word_count = len(summary.split())
         logger.info(f"Summary complete: {word_count} words in {elapsed}s")
 
         return {
             "summary": summary,
+            "tldr": tldr,
             "content_type": content_type,
             "type_label": type_label,
             "chunks_processed": len(chunks),
