@@ -170,6 +170,43 @@ if st.session_state.summary:
         mime="text/markdown",
     )
 
+    # Regenerate at different depth
+    with st.expander("Regenerate at different depth"):
+        new_depth = st.select_slider(
+            "New depth",
+            options=["concise", "standard", "deep"],
+            value=depth,
+            key="regen_depth",
+        )
+        if st.button("Regenerate", key="regen_btn"):
+            if not st.session_state.transcript:
+                st.warning("No transcript available to regenerate.")
+            else:
+                regen_bar = st.progress(0, text="Starting...")
+                def on_p(done, total, msg):
+                    regen_bar.progress(min(done / max(total, 1), 1.0), text=msg)
+                with st.spinner(f"Regenerating at {new_depth} depth..."):
+                    summarizer_regen = YouTubeSummarizer(depth=new_depth)
+                    try:
+                        result = summarizer_regen.summarize_text(
+                            st.session_state.transcript,
+                            progress_callback=on_p,
+                        )
+                        st.session_state.summary = result["summary"]
+                        st.session_state.stats = {
+                            "type_label": result["type_label"],
+                            "chunks_processed": result["chunks_processed"],
+                            "transcript_words": result["transcript_words"],
+                            "summary_words": result["summary_words"],
+                            "elapsed_seconds": result["elapsed_seconds"],
+                            "keywords": result.get("keywords", []),
+                        }
+                        regen_bar.empty()
+                        st.rerun()
+                    except Exception as e:
+                        regen_bar.empty()
+                        st.error(f"Regeneration failed: {str(e)}")
+
     tab1, tab2 = st.tabs(["Summary", "Chat with Video"])
 
     with tab1:
@@ -192,7 +229,6 @@ if st.session_state.summary:
             with st.spinner("Indexing transcript for chat..."):
                 st.session_state.chatbot = VideoChatbot(st.session_state.transcript)
 
-        # Chat export button
         if st.session_state.messages:
             chat_md = "# Chat with Video\n\n"
             for msg in st.session_state.messages:
